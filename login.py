@@ -1,5 +1,5 @@
 """
-vklass cli
+ist cli
 
 Usage:
   ist <username> <password>
@@ -50,85 +50,22 @@ def login(user, pwd):
   r3 = s.post(url, data={"RelayState":rs,"SAMLResponse":saml}, headers = headers)
   return s
 
-def json_serial(obj):
-    """JSON serializer for objects not serializable by default json code"""
-
-    if isinstance(obj, (datetime, date)):
-        return obj.isoformat()
-    raise TypeError ("Type %s not serializable" % type(obj))
-
-def dateFromString(manad):
-  manader = {
-	"januari":1,
-	"februari":2,
-	"mars":3,
-	"april":4,
-        "maj":5,
-        "juni":6,
-        "juli":7,
-        "augusti":8,
-        "september":9,
-        "oktober":10,
-        "november":11,
-        "december":12
-	}
-  try:
-    return manader[manad]
-  except:
-    return 1
-
-def getNarvaro(s,id):
-  r5 = s.get("https://www.vklass.se/statistics/attendanceDetailed.aspx?userUID="+id)
-  lista = []
-  for data in r5.text.split("_manualCloseButtonText"):
-    row = data.split('"text"')[1].split('}')[0]
-    if row.__contains__("Status:"):
-      rowdata = json.loads(row[1:])
-      """Måndag 12 december 2022<br />kl: 10:45 - 11:40<br />Kurs: Matematik 1a <br />Status: Närvarande<br /><span style="color: red;">Sen ankomst:: 5 min</span>"""
-      info = rowdata.split("<br />")
-      date = info[0].split(" ")
-      time = info[1].replace("kl: ","").split(" - ")
-      hhmm = time[0].split(":")
-      ehhmm = time[1].split(":")
-      start = datetime(int(date[3]), dateFromString(date[2]), int(date[1]),int(hhmm[0]),int(hhmm[1]))
-      end = datetime(int(date[3]), dateFromString(date[2]), int(date[1]),int(ehhmm[0]),int(ehhmm[1]))
-      lektion = info[2].replace("Kurs: ","").strip()
-      status = info[3].replace("Status: ","").strip()
-      avvikelse = 0
-      if len(info) == 5:
-        avvikelse = int(info[4].split(">")[1].split("<")[0].split(":")[-1].strip().split(" ")[0])
-      narvaro_entry = {
-        "start":start,
-        "end":end,
-        "lektion":lektion,
-        "status":status,
-        "avvikelse": avvikelse
-      }
-      lista.append(narvaro_entry)
-  return sorted(lista,key=itemgetter('start'))
-
-def getKlass(s):
-  r5 = s.get("https://www.vklass.se/Class.aspx")
+def getElever(s):
   elever = []
-  for data in r5.text.split("teacherStudentLink"):
-    row = data.split('Info & resultat')[0]
-    if row.__contains__('href="/User.aspx?id='):
-      id_and_name = row.split("id=")[1].split('">')
-      student = {
-        "short_id":id_and_name[0],
-        "name":id_and_name[1].split("</a>")[0],
-        "uuid":row.split('/Results/StudentResult.aspx?id=')[1].split("&amp;")[0]
-      }
-      elever.append(student)
+  context = s.get("https://goteborggy.se.ist.com/teacher/api/v1/roles/teacher/contexts",
+    headers={"Content-Type":"application/json;charset=UTF-8"}) 
+  skolor = context.json()
+  for skola in skolor:
+    r4 = s.get("https://goteborggy.se.ist.com/teacher/teacher/api/v1/units/"+skola['id']+"/hierarchy?_locale=sv_SE",
+      headers={"Content-Type":"application/json;charset=UTF-8"})
+    r5 = s.post("https://goteborggy.se.ist.com/teacher/teacher/api/v1/units/"+skola['id']+"/stud",
+      json=r4.json(),
+      headers={"Content-Type":"application/json;charset=UTF-8"})
+    elever.extend(r5.json())
   return elever
 
 if __name__ == "__main__":
   from docopt import docopt
   args = docopt(__doc__)
-
   s = login(args["<username>"],args["<password>"])
-  r4 = s.get("https://goteborggy.se.ist.com/teacher/teacher/api/v1/units/e1f62110-f3ba-4c5e-b36c-525362581561/hierarchy?_locale=sv_SE",
-    headers={"Content-Type":"application/json;charset=UTF-8"})
-  r5 = s.post("https://goteborggy.se.ist.com/teacher/teacher/api/v1/units/e1f62110-f3ba-4c5e-b36c-525362581561/stud",json=r4.json())
-  for stud in r5.json():
-   print(stud["firstName"])
+  print(getElever(s))
