@@ -4,6 +4,11 @@ import json
 from bottle import route, run, response, post, get, request
 from login import login, getElever
 
+@route('/elever', method=['OPTIONS'])
+def option():
+    return ""
+
+
 @get('/elever')
 def elever():
     try:
